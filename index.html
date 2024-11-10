@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Live Location with Dynamic Radius</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+  <style>
+    #map {
+      height: 100vh;
+      width: 100%;
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script>
+    let map, userMarker, radiusCircle;
+
+    // Initialize the map
+    map = L.map('map').setView([0, 0], 15);
+
+    // Add OpenStreetMap tiles
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    }).addTo(map);
+
+    // Function to update user location dynamically
+    function updateUserLocation(lat, lng) {
+      const userLocation = [lat, lng];
+
+      // Center map on user's location
+      map.setView(userLocation);
+
+      // Add or update user marker
+      if (!userMarker) {
+        userMarker = L.marker(userLocation).addTo(map).bindPopup('You are here!');
+      } else {
+        userMarker.setLatLng(userLocation);
+      }
+
+      // Add or update 1km radius circle
+      if (!radiusCircle) {
+        radiusCircle = L.circle(userLocation, {
+          radius: 1000, // 1km radius in meters
+          color: 'red',
+          fillColor: '#f03',
+          fillOpacity: 0.2,
+        }).addTo(map);
+      } else {
+        radiusCircle.setLatLng(userLocation);
+      }
+
+      findNearbyPlaces(lat, lng);
+    }
+
+    // Geolocation to track user's live location
+    if (navigator.geolocation) {
+      navigator.geolocation.watchPosition(
+        position => {
+          const { latitude, longitude } = position.coords;
+          updateUserLocation(latitude, longitude);
+        },
+        error => {
+          console.error(error);
+          alert('Unable to retrieve your location.');
+        },
+        {
+          enableHighAccuracy: true,
+        }
+      );
+    } else {
+      alert('Geolocation is not supported by this browser.');
+    }
+
+    // Find nearby places using Overpass API
+    function findNearbyPlaces(lat, lng) {
+      const query = `
+        [out:json];
+        (
+          node["amenity"](around:1000, ${lat}, ${lng});
+          way["amenity"](around:1000, ${lat}, ${lng});
+          relation["amenity"](around:1000, ${lat}, ${lng});
+        );
+        out center;`;
+
+      fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`)
+        .then(response => response.json())
+        .then(data => {
+          data.elements.forEach(element => {
+            const { lat, lon, tags } = element;
+            L.marker([lat, lon])
+              .addTo(map)
+              .bindPopup(tags.name || 'Unnamed Place');
+          });
+        })
+        .catch(error => console.error('Error fetching nearby places:', error));
+    }
+  </script>
+</body>
+</html>
